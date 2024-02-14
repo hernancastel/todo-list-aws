@@ -48,7 +48,7 @@ pipeline {
                     export BASE_URL=$(jq ".[0].OutputValue" out.json -r)
                     echo $BASE_URL
                     export PYTHONPATH=${WORKSPACE}
-                    python3 -m pytest --junitxml=result-rest.xml -s ${WORKSPACE}/test/integration/todoApiTest.py
+                    pytest --junitxml=result-rest.xml -s ${WORKSPACE}/test/integration/todoApiTest.py
                 '''
                 junit 'result-rest.xml'
             }
