@@ -1,0 +1,63 @@
+pipeline {
+    agent any
+    stages {
+        stage ('Get Code') {
+            steps {
+                cleanWs()
+                sh'''
+                    whoami
+                    hostname
+                '''
+                git branch: 'master', url:'https://github.com/hernancastel/todo-list-aws.git'
+            }
+        }
+        
+         stage('Static Test') {
+             steps {
+                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    sh '''
+                        whoami
+                        hostname
+
+                        flake8 --format=pylint --output=result-flake8-production.txt --exit-zero src/*
+                        bandit -r . -o result-bandit-production.xml --exit-zero -f xml
+                        '''
+                        recordIssues tools: [flake8(pattern: 'result-flake8-production.txt')], enabledForFailure: true
+                        recordIssues tools: [junitParser(pattern: 'result-bandit-production.xml', id: 'bandit', name: 'Bandit Security')], enabledForFailure: true
+                }
+             }
+         }
+         
+         stage('Deploy') {
+            steps {
+                sh '''
+                    whoami
+                    hostname
+                    sam build
+                    sam deploy --stack-name todo-list-production --resolve-s3 --region us-east-1 --no-confirm-changeset --no-fail-on-empty-changeset --force-upload --config-env staging
+                    sam list stack-outputs --stack-name todo-list-production --region us-east-1 --output json > out-production.json
+                    '''
+            }
+         
+         }
+         
+         stage('Rest Test') {
+            steps {
+              sh '''
+                    whoami
+                    hostname
+                    export BASE_URL=$(jq ".[0].OutputValue" out-production.json -r)
+                    echo $BASE_URL
+                    export PYTHONPATH=${WORKSPACE}
+
+                    #python3 -m pytest --junitxml=result-rest-production.xml ${WORKSPACE}/test/integration/todoApiTest.py
+                    pytest --junitxml=result-rest-production.xml ${WORKSPACE}/test/integration/todoApiTest.py
+                    pytest --junitxml=result-rest-production.xml -k "not deletetodo and not updatetodo and not addtodo" -s ${WORKSPACE}/test/integration/todoApiTest.py
+
+                '''
+                junit 'result-rest-production.xml'
+            }
+        }
+        
+    }
+}
