@@ -58,7 +58,7 @@ pipeline {
             steps {
                 git branch: 'develop', url: 'https://github.com/hernancastel/todo-list-aws.git'
                 sh '''
-                    git remote set-url origin https://x-access-token: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@github.com/hernancastel/todo-list-aws.git
+                    git remote set-url origin https://x-access-token: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@github.com/hernancastel/todo-list-aws.git
                     git checkout master
                     git merge develop
                     git push origin master
