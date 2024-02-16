@@ -61,11 +61,7 @@ pipeline {
         
          stage('Promote') {
             environment {
-                GIT_ACCESS_TOKEN = """${sh(
-                        returnStdout: true,
-                        script: 'echo Z2hwX0Q3eU9uYlJiUmxOWHF2alFkaE9zam5ZVkNpZjVvdDBzeWVSYgo= | base64 -d | tr -d \'\n\t\''
-                                                      
-                    )}""" 
+                GIT_ACCESS_TOKEN = credentials('GIT_ACCESS_TOKEN')
             }
             steps {
                 sh '''
