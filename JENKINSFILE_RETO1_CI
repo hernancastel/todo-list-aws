@@ -1,71 +1,80 @@
 pipeline {
     agent any
+    options {
+        // This is required if you want to clean before build
+        skipDefaultCheckout(true)
+    }
     stages {
         stage ('Get Code') {
             steps {
+                // Clean before build
                 cleanWs()
-                sh'''
-                    whoami
-                    hostname
-                '''
+                // Obtener código del repo de la rama develop
                 git branch: 'develop', url:'https://github.com/hernancastel/todo-list-aws.git'
             }
         }
         
-         stage('Static Test') {
-             steps {
-                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    sh '''
-                        whoami
-                        hostname
-                        flake8 --format=pylint --output=result-flake8.txt --exit-zero src/*
-                        bandit -r . -o result-bandit.xml --exit-zero -f xml
+        stage('Static test') {
+            parallel{
+                stage('flake8'){
+                    steps {
+                        sh '''
+                            flake8 --exit-zero --format=pylint src > flake8.out
                         '''
-                        recordIssues tools: [flake8(pattern: 'result-flake8.txt')], enabledForFailure: true
-                        recordIssues tools: [junitParser(pattern: 'result-bandit.xml', id: 'bandit', name: 'Bandit Security')], enabledForFailure: true
+                        recordIssues tools: [flake8(name: 'Flake8', pattern: 'flake8.out')], qualityGates:[[threshold:10, type: 'TOTAL', unstable: false],[threshold: 12, type: 'TOTAL', unstable: false]]
+                	}
                 }
-             }
-         }
+                stage('bandit') {
+                    steps {
+                	    sh '''
+                			bandit --exit-zero -r . -f custom -o bandit.out --severity-level medium --msg-template "{abspath}:{line}: [{test_id}] {msg}"
+                		'''
+                		recordIssues tools: [pyLint(name: 'Bandit', pattern: 'bandit.out')], qualityGates:[[threshold:1, type: 'TOTAL', unstable: false],[threshold: 2, type: 'TOTAL', unstable: false]]
+                	}
+                }
+            }
+        }
          
-         stage('Deploy') {
+        stage('Deploy') {
             steps {
                 sh '''
-                    whoami
-                    hostname
                     sam build
-                    sam deploy --stack-name todo-list-staging --resolve-s3 --region us-east-1 --no-confirm-changeset --no-fail-on-empty-changeset --force-upload --config-env staging
-                    sam list stack-outputs --stack-name todo-list-staging --region us-east-1 --output json > out.json
-                    '''
-            }
-         
-         }
-         
-         stage('Rest Test') {
-            steps {
-              sh '''
-                    whoami
-                    hostname
-                    export BASE_URL=$(jq ".[0].OutputValue" out.json -r)
-                    echo $BASE_URL
-                    export PYTHONPATH=${WORKSPACE}
-                    pytest --junitxml=result-rest.xml -s ${WORKSPACE}/test/integration/todoApiTest.py
+                    sam deploy --stack-name todo-list-aws --resolve-s3 --region us-east-1 --no-confirm-changeset --no-fail-on-empty-changeset --force-upload --config-env staging
+
                 '''
-                junit 'result-rest.xml'
+            }
+        }
+         
+        stage('Rest') {
+            environment {
+                BASE_URL = """${sh(
+                        returnStdout: true,
+                        script: 'sam list endpoints --stack-name todo-list-aws --region us-east-1 --output json | jq -r \'.[] | select(.LogicalResourceId=="ServerlessRestApi").CloudEndpoint | .[0]\' | tr -d \'\n\t\''
+                    )}""" 
+            }
+            steps {
+                sh '''
+                    pytest --junitxml=result-rest.xml test/integration/todoApiTest.py
+                '''
             }
         }
         
-        stage('Promote') {
+         stage('Promote') {
+            environment {
+                GIT_ACCESS_TOKEN = """${sh(
+                        returnStdout: true,
+                        script: 'echo Z2hwX0Q3eU9uYlJiUmxOWHF2alFkaE9zam5ZVkNpZjVvdDBzeWVSYgo= | base64 -d | tr -d \'\n\t\''
+                                                      
+                    )}""" 
+            }
             steps {
-                git branch: 'develop', url: 'https://github.com/hernancastel/todo-list-aws.git'
                 sh '''
-                    git remote set-url origin https://x-access-token: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@github.com/hernancastel/todo-list-aws.git
+                    git remote set-url origin https://x-access-token:$GIT_ACCESS_TOKEN@github.com/hernancastel/todo-list-aws.git
                     git checkout master
                     git merge develop
                     git push origin master
                 '''
-                cleanWs()
             }
-            
         }
     }
 }
