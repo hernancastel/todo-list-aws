@@ -56,6 +56,7 @@ pipeline {
                 sh '''
                     pytest --junitxml=result-rest.xml -s ${WORKSPACE}/test/integration/todoApiTest.py
                 '''
+                junit 'result-rest.xml'
             }
         }
         
