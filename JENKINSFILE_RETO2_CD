@@ -31,9 +31,9 @@ pipeline {
             steps{
                 sh '''
                     echo $BASE_URL
-                    pytest --junitxml=result-rest-production.xml -k "not deletetodo and not updatetodo and not addtodo" -s ${WORKSPACE}/test/integration/todoApiTest.py
+                    chmod +x testRest.sh
+                    ./testRest.sh
                 '''
-                junit 'result-rest-production.xml'
             }
         }
     }
